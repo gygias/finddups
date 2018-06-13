@@ -9,6 +9,8 @@
 #import <Foundation/Foundation.h>
 #import <AppKit/NSWorkspace.h>
 
+//#define USE_CKSUM 1
+
 int usage() {
     NSLog(@"usage: finddup [-d|s|v|t] <path>");
     return 1;
@@ -27,6 +29,42 @@ int trashIsEmpty() {
     }
     
     return empty;
+}
+
+int mydiff(NSString *file1, NSString *file2) {
+    NSFileHandle *f1 = [NSFileHandle fileHandleForReadingAtPath:file1];
+    if ( ! f1 ) {
+        NSLog(@"failed to open: %@",file1);
+        exit(1);
+    }
+    
+    NSFileHandle *f2 = [NSFileHandle fileHandleForReadingAtPath:file2];
+    if ( ! f2 ) {
+        NSLog(@"failed to open: %@",file2);
+        exit(1);
+    }
+    
+    NSUInteger readBy = 4096;
+    do {
+        NSData *d1 = [f1 readDataOfLength:readBy];
+        NSData *d2 = [f2 readDataOfLength:readBy];
+        
+        if ( ! d1 || ! d2 ) {
+            NSLog(@"error reading: %@",d1 ? file2 : file1);
+            exit(1);
+        }
+        
+        if ( [d1 length] == 0 && [d1 isEqual:d2] )
+            break;
+        
+        if ( [d1 length] != [d2 length] )
+            return 1;
+        else if ( ! [d1 isEqual:d2] )
+            return 1;
+        
+    } while(1);
+    
+    return 0;
 }
 
 int main(int argc, const char * argv[]) {
@@ -108,6 +146,7 @@ int main(int argc, const char * argv[]) {
             NSArray *likeSized = [map allKeysForObject:size];
             if ( [likeSized count] ) {
                 
+#ifdef USE_CKSUM
                 NSTask *cksum1 = [NSTask new];
                 cksum1.launchPath = @"/usr/bin/cksum";
                 cksum1.arguments = @[fullPath];
@@ -131,10 +170,12 @@ int main(int argc, const char * argv[]) {
                 }
                 
                 NSString *output1 = [[string1 componentsSeparatedByString:@" "] firstObject];
+#endif
                 
                 for ( NSString *likeSize in likeSized ) {
                     NSString *otherFullPath = [path stringByAppendingPathComponent:likeSize];
                     
+#if USE_CKSUM
                     NSTask *cksum2 = [NSTask new];
                     cksum2.launchPath = @"/usr/bin/cksum";
                     cksum2.arguments = @[otherFullPath];
@@ -159,6 +200,9 @@ int main(int argc, const char * argv[]) {
                     
                     NSString *output2 = [[string2 componentsSeparatedByString:@" "] firstObject];
                     if ( [output1 isEqualToString:output2] ) {
+#else
+                    if ( 0 == mydiff(fullPath,otherFullPath) ) {
+#endif
                         if ( verbose ) NSLog(@"*** %@ appears to be a dup of %@!",aPath,likeSize);
                         dupSpace += [size unsignedIntegerValue];
                         
