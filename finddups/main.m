@@ -69,7 +69,8 @@ int main(int argc, const char * argv[]) {
             } else {
                 return usage();
             }
-        }
+        } else if ( [arg1 hasPrefix:@"-"] )
+            return usage();
         
         if ( delete && ! ignoreTrash && ! trashIsEmpty() ) {
             NSLog(@"please empty the trash first. use -t to override");
@@ -78,6 +79,16 @@ int main(int argc, const char * argv[]) {
         
         NSString *path = arg2 ? arg2 : arg1;
         NSFileManager *fm = [NSFileManager defaultManager];
+        
+        BOOL isDir = NO;
+        if ( ! [fm fileExistsAtPath:path isDirectory:&isDir] ) {
+            NSLog(@"not found: %@",path);
+            return 1;
+        } else if ( ! isDir ) {
+            NSLog(@"not a directory: %@",path);
+            return 1;
+        }
+        
         NSDirectoryEnumerator *e = [fm enumeratorAtPath:path];
         NSArray *fileList = [e allObjects];
         
