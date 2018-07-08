@@ -11,8 +11,21 @@
 
 //#define USE_CKSUM 1
 
-int usage() {
-    NSLog(@"usage: finddup [-d|s|v|t] <path>");
+int usage(int help) {
+    NSLog(@"usage: finddup [-d|s|v|t|o|O|h] <path>");
+    if ( help ) {
+        NSLog(@"  d - delete duplicate files");
+        NSLog(@"  D - preserve 'deeper' files (e.g. if deeper-nested files have been manually sorted)");
+        NSLog(@"      without this option, duplicate files are deleted in the order enumerated");
+        NSLog(@"  v - verbose log spew");
+        NSLog(@"  t - ignore trash-not-empty state");
+        NSLog(@"");
+        NSLog(@"  o - open like-sized but different files in preview");
+        NSLog(@"  O - open duplicate files in preview. the file to be deleted is opened, and should be listed, first.");
+        NSLog(@"      these options are intended for dry runs");
+        NSLog(@"");
+        NSLog(@"  h - display this usage info");
+    }
     return 1;
 }
 
@@ -71,7 +84,7 @@ int main(int argc, const char * argv[]) {
     @autoreleasepool {
         
         if ( argc < 2 ) {
-            return usage();
+            return usage(0);
         }
         
         NSString *arg1 = [NSString stringWithUTF8String:argv[1]];
@@ -80,7 +93,7 @@ int main(int argc, const char * argv[]) {
         BOOL openDelete = NO;
         BOOL verbose = NO;
         BOOL delete = NO;
-        BOOL shallow = NO;
+        BOOL deeper = NO;
         BOOL ignoreTrash = NO;
         if ( argc == 3 ) {
             arg2 = [NSString stringWithUTF8String:argv[2]];
@@ -96,19 +109,21 @@ int main(int argc, const char * argv[]) {
                         delete = YES;
                     else if ( [anOption isEqualToString:@"v"] )
                         verbose = YES;
-                    else if ( [anOption isEqualToString:@"s"] )
-                        shallow = YES;
+                    else if ( [anOption isEqualToString:@"D"] )
+                        deeper = YES;
                     else if ( [anOption isEqualToString:@"t"] )
                         ignoreTrash = YES;
+                    else if ( [anOption isEqualToString:@"h"] )
+                        return usage(1);
                     else
-                        return usage();
+                        return usage(0);
                     chomp = [chomp substringFromIndex:1];
                 }
             } else {
-                return usage();
+                return usage(0);
             }
         } else if ( [arg1 hasPrefix:@"-"] )
-            return usage();
+            return usage(0);
         
         if ( delete && ! ignoreTrash && ! trashIsEmpty() ) {
             NSLog(@"please empty the trash first. use -t to override");
@@ -208,18 +223,38 @@ int main(int argc, const char * argv[]) {
                         
                         if ( delete ) {
                             NSString *fileToDelete = nil;
-                            if ( shallow ) {
-                                NSInteger count1 = [[fullPath componentsSeparatedByString:@"/"] count];
-                                NSInteger count2 = [[otherFullPath componentsSeparatedByString:@"/"] count];
+                            if ( deeper ) {
+                                NSArray *ignoreSubdirs = @[@"_unsorted"];
+                                NSArray *fullPathComponents = [fullPath pathComponents];
+                                NSInteger count1 = [fullPathComponents count];
+                                NSArray *otherFullPathComponents = [otherFullPath pathComponents];
+                                NSInteger count2 = [otherFullPathComponents count];
+                                for ( NSString *component in fullPathComponents ) {
+                                    if ( [ignoreSubdirs containsObject:component] ) {
+                                        //NSLog(@"'%@' contains '%@'!",fullPath,component);
+                                        fileToDelete = fullPath;
+                                        goto delete_found;
+                                    }
+                                }
+                                for ( NSString *component in otherFullPathComponents ) {
+                                    if ( [ignoreSubdirs containsObject:component] ) {
+                                        //NSLog(@"'%@' contains '%@'!",otherFullPath,component);
+                                        fileToDelete = otherFullPath;
+                                        goto delete_found;
+                                    }
+                                }
                                 fileToDelete = count1 > count2 ? otherFullPath : fullPath;
-                                if ( verbose ) NSLog(@"deleting shallowest %@",fileToDelete);
+                            delete_found:
+                                    
+                                //NSLog(@"[%ld]:%@ vs [%ld]:%@",count1,fullPath,count2,otherFullPath);
+                                if ( verbose ) NSLog(@"trashing shallower file: %@ vs %@",fileToDelete,[fileToDelete isEqualToString:fullPath] ? otherFullPath : fullPath);
                             } else {
                                 fileToDelete = fullPath;
-                                if ( verbose ) NSLog(@"deleting current file: %@",fileToDelete);
+                                if ( verbose ) NSLog(@"trashing current file: %@",fileToDelete);
                             }
                             
                             if ( openDelete ) {
-                                [[NSTask launchedTaskWithLaunchPath:@"/usr/bin/open" arguments:@[fileToDelete,[fileToDelete isEqualToString:fullPath] ? otherFullPath : fullPath]] waitUntilExit];
+                                [[NSTask launchedTaskWithLaunchPath:@"/usr/bin/open" arguments:@[@"-a",@"Preview",fileToDelete,[fileToDelete isEqualToString:fullPath] ? otherFullPath : fullPath]] waitUntilExit];
                             } else {
                                 NSURL *url = [NSURL fileURLWithPath:fileToDelete], *outURL = nil;
                                 NSError *error = nil;
@@ -239,7 +274,7 @@ int main(int argc, const char * argv[]) {
                     } else {
                         if ( verbose ) NSLog(@"*** %@ has the same size as %@, but they are different!",aPath,likeSize);
                         if ( openJustSizeDups )
-                            [[NSTask launchedTaskWithLaunchPath:@"/usr/bin/open" arguments:@[fullPath,otherFullPath]] waitUntilExit];
+                            [[NSTask launchedTaskWithLaunchPath:@"/usr/bin/open" arguments:@[@"-a",@"Preview",fullPath,otherFullPath]] waitUntilExit];
                     }
                 }
             }

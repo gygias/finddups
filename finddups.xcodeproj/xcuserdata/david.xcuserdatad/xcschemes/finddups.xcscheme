@@ -63,7 +63,7 @@
       </BuildableProductRunnable>
       <CommandLineArguments>
          <CommandLineArgument
-            argument = "-sdt"
+            argument = "-dOv"
             isEnabled = "YES">
          </CommandLineArgument>
          <CommandLineArgument
